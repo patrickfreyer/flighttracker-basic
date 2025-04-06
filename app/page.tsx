@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Earth from './components/Earth';
 import FlightSearch from './components/FlightSearch';
 import CopyrightNotice from './components/CopyrightNotice';
+import { RouteDataType } from './types/route';
 
 export default function Home() {
   const [flightData, setFlightData] = useState<any>(null);
+  const [routeData, setRouteData] = useState<RouteDataType | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,6 +17,37 @@ export default function Home() {
     setIsLoading(false);
     setError(null);
   };
+
+  // Fetch route data when flight data changes
+  useEffect(() => {
+    if (flightData) {
+      // If we have departure and arrival IATA codes, get coordinates from the API
+      if (flightData.dep_iata && flightData.arr_iata) {
+        const fetchRouteData = async () => {
+          try {
+            console.log('Fetching route data for', flightData.dep_iata, flightData.arr_iata);
+            const response = await fetch(`/api/route-data?departure=${flightData.dep_iata}&arrival=${flightData.arr_iata}`);
+            
+            if (!response.ok) {
+              throw new Error('Failed to fetch route data');
+            }
+            
+            const data = await response.json();
+            console.log('Route data received:', data);
+            setRouteData(data);
+          } catch (error) {
+            console.error('Error fetching route data:', error);
+          }
+        };
+        
+        fetchRouteData();
+      } else {
+        setRouteData(null);
+      }
+    } else {
+      setRouteData(null);
+    }
+  }, [flightData]);
 
   const handleSearch = async (flightNumber: string) => {
     setIsLoading(true);
@@ -41,11 +74,14 @@ export default function Home() {
   return (
     <div className="relative w-full h-screen">
       {/* Earth Component */}
-      <Earth flightPosition={flightData ? {
-        lat: flightData.lat,
-        lng: flightData.lng,
-        alt: flightData.alt || 0
-      } : undefined} />
+      <Earth 
+        flightPosition={flightData ? {
+          lat: flightData.lat,
+          lng: flightData.lng,
+          alt: flightData.alt || 0
+        } : undefined} 
+        routeData={routeData}
+      />
       
       {/* Flight Search Component */}
       <FlightSearch
