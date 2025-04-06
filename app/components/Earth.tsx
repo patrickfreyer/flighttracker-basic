@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 
 interface EarthProps {
   flightPosition?: { lat: number; lng: number; alt: number };
@@ -11,8 +12,9 @@ interface EarthProps {
 const Earth = ({ flightPosition }: EarthProps) => {
   const mountRef = useRef<HTMLDivElement>(null);
   const earthRef = useRef<THREE.Mesh | null>(null);
-  const flightMarkerRef = useRef<THREE.Mesh | null>(null);
+  const flightMarkerRef = useRef<THREE.Object3D | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
+  const planeModelRef = useRef<THREE.Object3D | null>(null);
 
   useEffect(() => {
     if (!mountRef.current) return;
@@ -65,10 +67,18 @@ const Earth = ({ flightPosition }: EarthProps) => {
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     
-    // Create flight marker
-    if (flightPosition) {
-      addFlightMarker(flightPosition);
-    }
+    // Load the plane model
+    const gltfLoader = new GLTFLoader();
+    gltfLoader.load('/delta_small_plane.glb', (gltf) => {
+      const model = gltf.scene;
+      model.scale.set(0.002, 0.002, 0.002); // Much smaller scale
+      planeModelRef.current = model;
+      
+      // Create flight marker if position is available
+      if (flightPosition) {
+        addFlightMarker(flightPosition);
+      }
+    });
     
     // Handle window resize
     const handleResize = () => {
@@ -126,21 +136,37 @@ const Earth = ({ flightPosition }: EarthProps) => {
       sceneRef.current.remove(flightMarkerRef.current);
     }
     
-    // Create a new flight marker (simple cube)
-    const markerGeometry = new THREE.BoxGeometry(0.1, 0.1, 0.1);
-    const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+    // If we don't have the plane model loaded yet, wait
+    if (!planeModelRef.current) return;
+    
+    // Clone the plane model to use as our marker
+    const planeMarker = planeModelRef.current.clone();
     
     // Position the marker on the globe
-    // Add a small offset from the Earth's surface
-    const radius = 2.05; // Earth radius + small offset
+    const radius = 2.1; // Increased radius to ensure it's outside Earth
     const markerPosition = latLngToVector3(position.lat, position.lng, radius);
-    marker.position.copy(markerPosition);
+    planeMarker.position.copy(markerPosition);
+    
+    // Orient the plane to point in the right direction
+    // Create a position vector pointing from the center of the earth to the plane
+    const up = new THREE.Vector3().subVectors(markerPosition, new THREE.Vector3(0, 0, 0)).normalize();
+    
+    // Create a direction vector for the plane to face (tangent to Earth)
+    // This will make the plane fly along lines of latitude
+    const east = new THREE.Vector3(-up.z, 0, up.x).normalize();
+    const north = new THREE.Vector3().crossVectors(up, east).normalize();
+    
+    // Create a rotation matrix from these vectors
+    const rotationMatrix = new THREE.Matrix4().makeBasis(east, up, north);
+    planeMarker.setRotationFromMatrix(rotationMatrix);
+    
+    // Additional rotation to align the plane with the flight direction
+    planeMarker.rotateOnAxis(new THREE.Vector3(0, 1, 0), Math.PI / 2);
     
     // Add marker to scene
     if (sceneRef.current) {
-      sceneRef.current.add(marker);
-      flightMarkerRef.current = marker;
+      sceneRef.current.add(planeMarker);
+      flightMarkerRef.current = planeMarker;
     }
   };
   

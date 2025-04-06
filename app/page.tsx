@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Earth from './components/Earth';
 import FlightSearch from './components/FlightSearch';
+import CopyrightNotice from './components/CopyrightNotice';
 
 export default function Home() {
   const [flightData, setFlightData] = useState<any>(null);
@@ -88,6 +89,9 @@ export default function Home() {
           </div>
         </div>
       )}
+      
+      {/* Copyright Notice Component */}
+      <CopyrightNotice />
     </div>
   );
 }
